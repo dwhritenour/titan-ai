@@ -4,7 +4,11 @@ unique_ids:
   forms:
     Form1: JQV6XMTAKNNECJG6NX3MTI2H22YCOPWU
     Layouts.BaseLayout: 3QPRWDZWE3Z6XL7ALELL6IWPDHD2L2QE
+    TitanAIChat: '1786029387231.4211574224479405'
+    TitanAIMessageRow: '1786029333735.5643020593022066'
   modules:
     Layouts: SHSI7UNYUSMWGEM3PLKECLAOFDK7WTIA
   scripts: {}
-  server_modules: {}
+  server_modules:
+    chat_service: '1786029309911.6663263148870567'
+    db_config: '1786029285757.7929186118930218'

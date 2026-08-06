@@ -1,0 +1,18 @@
+<anvil-form container="ColumnPanel">
+  <anvil-component type="ColumnPanel" name="cp_row">
+    <anvil-component type="ColumnPanel" name="cp_user" prop:role="card">
+      <anvil-component type="Label" name="lbl_user" prop:bold="true"></anvil-component>
+    </anvil-component>
+    <anvil-component type="ColumnPanel" name="cp_assistant">
+      <anvil-component type="RichText" name="rt_answer" prop:format="markdown"></anvil-component>
+      <anvil-component type="FlowPanel" name="fp_actions" prop:spacing="small">
+        <anvil-component type="Link" name="lk_thumbs_up" prop:text="👍"></anvil-component>
+        <anvil-component type="Link" name="lk_thumbs_down" prop:text="👎"></anvil-component>
+        <anvil-component type="Link" name="lk_trace" prop:text="How I got this"></anvil-component>
+      </anvil-component>
+      <anvil-component type="RichText" name="rt_trace" prop:format="markdown" prop:visible="false"></anvil-component>
+    </anvil-component>
+    <anvil-component type="Label" name="lbl_status"></anvil-component>
+    <anvil-component type="Label" name="lbl_error"></anvil-component>
+  </anvil-component>
+</anvil-form>
