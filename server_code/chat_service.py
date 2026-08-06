@@ -1,154 +1,274 @@
+"""
+chat_service.py - Anvil Server Module (Titan AI app)
+====================================================
+Server callables for the Titan AI chat form.
+
+This app is a THIN CLIENT: it writes user questions into the
+tai_chat_messages queue and reads the thread back. All AI work is
+done by titan-ai-service on Hermes. If that service is down,
+questions queue up and are answered when it returns.
+
+Auth note: no Anvil Users service — matches the rest of the app
+family (no app records logins). Identity is a picked name per
+session (SE-kiosk pattern), used for the question log, feedback
+attribution, and the rate limiter. This is honor-system identity,
+same trust level as the other in-plant apps.
+
+Callables:
+    ta_get_users()                            -> list of names for the picker
+    ta_start_session(username)                -> session info
+    ta_send_message(session_id, text)         -> message_id
+    ta_get_updates(session_id, after_id)      -> new rows + busy flag
+    ta_submit_feedback(message_id, rating, comment=None)
+    ta_get_suggested_questions()              -> list of strings
+
+Author: Dave Whritenour / Claude AI Assistant
+Project: Titan Flow Control - Year of Automation
+Created: August 2026
+"""
+
+import json
+
 import anvil.server
-import anvil.users
-import uuid
-from datetime import datetime
 
-from .db_config import get_connection
+from . import db_config
 
-# ---------------------------------------------------------------------------
-# Schema contract with titan-ai-service on Hermes (migration 020).
-#
-# This app is a thin client: it INSERTs the user's question as a `pending`
-# row, and titan-ai-service (running on Hermes) reads pending rows, does the
-# work against Nexus, and writes back `status`, `assistant`, and `error` rows.
-# This app then polls for those rows. It never writes anything but questions
-# and thumbs-up/down ratings -- strictly read-only with respect to Nexus data.
-#
-# The table/column names below MUST match dbo.tai_chat_messages as created by
-# migration 020. If the live schema differs, adjust these constants only --
-# the query text is built from them.
-# ---------------------------------------------------------------------------
-TABLE = "dbo.tai_chat_messages"
+# Names shown in the "Who's asking?" picker. EDIT THIS LIST as the
+# user group changes — free-text fallback is allowed, so an omission
+# is inconvenient, not blocking.
+USERS = [
+  "Dave",
+  # add the other ~4 users here
+]
 
-COL_ID = "message_id"        # BIGINT IDENTITY primary key
-COL_SESSION = "session_id"   # VARCHAR: groups a conversation
-COL_EMAIL = "user_email"     # VARCHAR: who asked
-COL_ROLE = "role"            # VARCHAR: 'user' | 'assistant' | 'status' | 'error'
-COL_CONTENT = "content"      # NVARCHAR(MAX): question / answer markdown / status / error text
-COL_TRACE = "trace"          # NVARCHAR(MAX): tool trace markdown (assistant rows), nullable
-COL_RATING = "rating"        # VARCHAR: 'up' | 'down', nullable
-COL_STATUS = "status"        # VARCHAR: 'pending' | 'working' | 'answered' | 'error' (user rows)
-COL_CREATED = "created_at"   # DATETIME2
+# Rate limit: questions per user per hour (5-user app; this is a
+# guardrail against a runaway Timer bug, not against people).
+MAX_QUESTIONS_PER_HOUR = 30
+MAX_QUESTION_CHARS = 2000
 
-# Columns returned to the client for each message row.
-_SELECT_COLS = ", ".join([COL_ID, COL_ROLE, COL_CONTENT, COL_TRACE, COL_RATING, COL_STATUS])
-
-
-# Suggested-question chips. A chip whose text ends in an ellipsis is a stem:
-# clicking it drops the stem into the TextBox for the user to complete rather
-# than sending it immediately.
-_SUGGESTIONS = [
-    "What work orders are open right now?",
-    "Which items are below their min level?",
-    "Show pending transfers between stores.",
-    "What's on the production schedule today?",
-    "Show the usage trend for a SKU…",
-    "How many units of a product sold last week…",
+SUGGESTED_QUESTIONS = [
+  "What work orders are due this week?",
+  "What transfers are pending right now?",
+  "Which SKUs are below min at Starlite?",
+  "What sales orders are late right now?",
+  "Show the usage trend for a SKU…",
+  "Why is a transfer being recommended?",
 ]
 
 
-def _current_email():
-    user = anvil.users.get_user()
-    return user["email"] if user else None
+def _get_connection():
+  return db_config.get_nexus_connection()
 
 
-def _row_to_message(row):
-    return {
-        "message_id": row[COL_ID],
-        "role": row[COL_ROLE],
-        "content": row[COL_CONTENT],
-        "trace": row.get(COL_TRACE),
-        "rating": row.get(COL_RATING),
-        "status": row.get(COL_STATUS),
-    }
+def _session_username(cursor, session_id):
+  """Return the session's username, or None if the session doesn't exist."""
+  cursor.execute(
+    "SELECT username FROM dbo.tai_chat_sessions WHERE session_id = %s",
+    (session_id,)
+  )
+  row = cursor.fetchone()
+  return row['username'] if row else None
 
 
-@anvil.server.callable(require_user=True)
-def ta_start_session():
-    """Begin a fresh conversation. Sessions are identified by this id on every
-    message row, so old sessions remain in the database for question-log
-    analytics. No row is written until the first question is asked."""
-    return uuid.uuid4().hex
+# =============================================================================
+# SESSION
+# =============================================================================
+
+@anvil.server.callable
+def ta_get_users():
+  """Names for the 'Who's asking?' picker."""
+  return USERS
 
 
-@anvil.server.callable(require_user=True)
-def ta_get_suggestions():
-    return list(_SUGGESTIONS)
+@anvil.server.callable
+def ta_start_session(username):
+  """Create a new chat session for the given (picked) name."""
+  username = (username or '').strip()[:100]
+  if not username:
+    raise ValueError("Please pick or type your name first.")
+  conn = _get_connection()
+  try:
+    cursor = conn.cursor()
+    cursor.execute(
+      """
+      INSERT INTO dbo.tai_chat_sessions (username)
+      OUTPUT inserted.session_id
+      VALUES (%s)
+      """,
+      (username,)
+    )
+    row = cursor.fetchone()
+    conn.commit()
+    return {'session_id': row['session_id'], 'username': username}
+  finally:
+    conn.close()
 
 
-@anvil.server.callable(require_user=True)
-def ta_send_message(session_id, question):
-    """Queue a question as a pending row and return it so the client can show
-    it immediately. titan-ai-service picks it up and writes the answer."""
-    question = (question or "").strip()
-    if not question:
-        return None
-    email = _current_email()
+# =============================================================================
+# SEND / RECEIVE
+# =============================================================================
 
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "INSERT INTO " + TABLE
-            + " (" + COL_SESSION + ", " + COL_EMAIL + ", " + COL_ROLE + ", "
-            + COL_CONTENT + ", " + COL_STATUS + ", " + COL_CREATED + ")"
-            + " OUTPUT INSERTED." + COL_ID + " AS " + COL_ID
-            + " VALUES (%s, %s, 'user', %s, 'pending', %s)",
-            (session_id, email, question, datetime.utcnow()),
-        )
-        new_id = cur.fetchone()[COL_ID]
-        conn.commit()
-        cur.close()
-    finally:
-        conn.close()
+@anvil.server.callable
+def ta_send_message(session_id, text):
+  """Queue a user question. Returns the new message_id."""
+  text = (text or '').strip()
+  if not text:
+    raise ValueError("Please type a question first.")
+  if len(text) > MAX_QUESTION_CHARS:
+    raise ValueError(
+      f"That question is too long ({len(text)} characters, "
+      f"max {MAX_QUESTION_CHARS}). Please shorten it."
+    )
 
-    return {
-        "message_id": new_id,
-        "role": "user",
-        "content": question,
-        "trace": None,
-        "rating": None,
-        "status": "pending",
-    }
+  conn = _get_connection()
+  try:
+    cursor = conn.cursor()
+
+    username = _session_username(cursor, session_id)
+    if username is None:
+      raise ValueError("Unknown chat session — reload the app and try again.")
+
+    # Rate limit
+    cursor.execute(
+      """
+      SELECT COUNT(*) AS n
+      FROM dbo.tai_chat_messages m
+      JOIN dbo.tai_chat_sessions s ON s.session_id = m.session_id
+      WHERE s.username = %s
+        AND m.role = 'user'
+        AND m.created_at > DATEADD(hour, -1, GETDATE())
+      """,
+      (username,)
+    )
+    if cursor.fetchone()['n'] >= MAX_QUESTIONS_PER_HOUR:
+      raise ValueError(
+        "You've hit the limit of questions for this hour. "
+        "Give it a few minutes and try again."
+      )
+
+    cursor.execute(
+      """
+      INSERT INTO dbo.tai_chat_messages (session_id, role, content, status)
+      OUTPUT inserted.message_id
+      VALUES (%s, 'user', %s, 'pending')
+      """,
+      (session_id, text)
+    )
+    message_id = cursor.fetchone()['message_id']
+
+    # First question becomes the session title (for the analytics view)
+    cursor.execute(
+      """
+      UPDATE dbo.tai_chat_sessions
+      SET last_activity_at = GETDATE(),
+          title = COALESCE(title, LEFT(%s, 200))
+      WHERE session_id = %s
+      """,
+      (text, session_id)
+    )
+    conn.commit()
+    return message_id
+  finally:
+    conn.close()
 
 
-@anvil.server.callable(require_user=True)
-def ta_get_updates(session_id, after_id):
-    """Return every message in this session with an id greater than after_id,
-    in order. Called by the client's 1s poll timer via call_s (silent)."""
-    if not session_id:
-        return []
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT " + _SELECT_COLS + " FROM " + TABLE
-            + " WHERE " + COL_SESSION + " = %s AND " + COL_ID + " > %s"
-            + " ORDER BY " + COL_ID + " ASC",
-            (session_id, after_id or 0),
-        )
-        rows = cur.fetchall()
-        cur.close()
-    finally:
-        conn.close()
-    return [_row_to_message(r) for r in rows]
+@anvil.server.callable
+def ta_get_updates(session_id, after_message_id):
+  """New rows for this session after the given id, plus a busy flag.
+
+  Called by the form's Timer (~1s). Returns:
+      {'messages': [ {message_id, role, content, tool_trace, created_at}, ... ],
+       'busy': bool}   # True while a question is pending/processing
+  """
+  conn = _get_connection()
+  try:
+    cursor = conn.cursor()
+    if _session_username(cursor, session_id) is None:
+      raise ValueError("Unknown chat session — reload the app and try again.")
+
+    cursor.execute(
+      """
+      SELECT message_id, role, content, tool_trace, created_at
+      FROM dbo.tai_chat_messages
+      WHERE session_id = %s AND message_id > %s
+      ORDER BY message_id
+      """,
+      (session_id, after_message_id or 0)
+    )
+    messages = []
+    for r in cursor.fetchall():
+      trace = None
+      if r['tool_trace']:
+        try:
+          trace = json.loads(r['tool_trace'])
+        except Exception:
+          trace = None
+      messages.append({
+        'message_id': r['message_id'],
+        'role': r['role'],
+        'content': r['content'],
+        'tool_trace': trace,
+        'created_at': r['created_at'],
+      })
+
+    cursor.execute(
+      """
+      SELECT COUNT(*) AS n
+      FROM dbo.tai_chat_messages
+      WHERE session_id = %s
+        AND role = 'user'
+        AND status IN ('pending', 'processing')
+      """,
+      (session_id,)
+    )
+    busy = cursor.fetchone()['n'] > 0
+
+    return {'messages': messages, 'busy': busy}
+  finally:
+    conn.close()
 
 
-@anvil.server.callable(require_user=True)
-def ta_rate_message(message_id, rating):
-    """Record a thumbs up/down on an assistant answer."""
-    if rating not in ("up", "down"):
-        return {"ok": False, "message": "Invalid rating"}
-    conn = get_connection()
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE " + TABLE + " SET " + COL_RATING + " = %s"
-            + " WHERE " + COL_ID + " = %s AND " + COL_ROLE + " = 'assistant'",
-            (rating, message_id),
-        )
-        conn.commit()
-        cur.close()
-    finally:
-        conn.close()
-    return {"ok": True}
+# =============================================================================
+# FEEDBACK & SUGGESTIONS
+# =============================================================================
+
+@anvil.server.callable
+def ta_submit_feedback(message_id, rating, comment=None):
+  """Thumbs up (+1) / down (-1) on an assistant answer.
+  Username is taken from the answer's own session."""
+  if rating not in (1, -1):
+    raise ValueError("rating must be 1 or -1")
+
+  conn = _get_connection()
+  try:
+    cursor = conn.cursor()
+    cursor.execute(
+      """
+      SELECT s.username
+      FROM dbo.tai_chat_messages m
+      JOIN dbo.tai_chat_sessions s ON s.session_id = m.session_id
+      WHERE m.message_id = %s AND m.role = 'assistant'
+      """,
+      (message_id,)
+    )
+    row = cursor.fetchone()
+    if row is None:
+      raise ValueError("That message is not an assistant answer.")
+    username = row['username']
+
+    cursor.execute(
+      """
+      INSERT INTO dbo.tai_chat_feedback (message_id, username, rating, comment)
+      VALUES (%s, %s, %s, %s)
+      """,
+      (message_id, username, rating, (comment or None))
+    )
+    conn.commit()
+    return True
+  finally:
+    conn.close()
+
+
+@anvil.server.callable
+def ta_get_suggested_questions():
+  return SUGGESTED_QUESTIONS

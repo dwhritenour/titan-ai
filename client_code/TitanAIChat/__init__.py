@@ -1,120 +1,148 @@
-from ._anvil_designer import TitanAIChatTemplate
-from anvil import *
-import anvil.server
-import anvil.users
+"""
+TitanAIChat - main chat form (Titan AI app)
+===========================================
+Build the components in the Anvil designer per
+Titan_AI_Form_Specification.docx, then paste this code.
 
-STATUS_FG = "#616161"  # busy line (spec section 5)
+Components referenced (names must match the designer):
+    cp_main            ColumnPanel (root content)
+    lbl_title          Label      "Titan AI"
+    lbl_subtitle       Label      tagline / read-only notice
+    lk_new_chat        Link       "New chat"
+    fp_chips           FlowPanel  suggested-question chips (Links added in code)
+    rp_messages        RepeatingPanel (item template: TitanAIMessageRow)
+    lbl_busy           Label      "Titan AI is thinking…"
+    txt_question       TextBox    (set PLACEHOLDER, not text!)
+    btn_send           Button     "Ask"
+    tmr_poll           Timer      interval 1 (seconds)
+"""
+
+import anvil.server
+from anvil import Link, DropDown, TextBox, ColumnPanel, Label, alert
+
+from ._anvil_designer import TitanAIChatTemplate
 
 
 class TitanAIChat(TitanAIChatTemplate):
-    def __init__(self, **properties):
-        super().__init__(**properties)
 
-        self.session_id = None
-        self.messages = []     # ordered list of message dicts shown in the thread
-        self.last_id = 0       # highest message_id seen from the server
-        self.pending = False   # True while waiting for an answer
+  def __init__(self, **properties):
+    self.init_components(**properties)
 
-        self.lbl_busy.visible = False
-        self.lbl_busy.foreground = STATUS_FG
-        self.rp_messages.items = []
+    self.username = None
+    self.session_id = None
+    self.last_message_id = 0
+    self.items = []          # rows currently shown in rp_messages
 
-        # Any logged-in Titan user. login_with_form blocks until logged in.
-        if not anvil.users.get_user():
-            anvil.users.login_with_form()
+    # Colors set in code (house rule): grey #616161 for the busy line —
+    # medium grey, clearly secondary to the black message text.
+    self.lbl_busy.foreground = "#616161"
+    self.lbl_busy.visible = False
 
-        self._start_session()
-        self._load_suggestions()
+    # No Anvil Users service — matches the rest of the app family.
+    # Identity is a picked name (SE-kiosk pattern), used for the
+    # question log, feedback attribution, and the rate limiter.
+    self._pick_user()
 
-    # -- Session -------------------------------------------------------------
+    self._start_session()
+    self._build_chips()
 
-    def _start_session(self):
-        self.session_id = anvil.server.call("ta_start_session")
-        self.messages = []
-        self.last_id = 0
-        self.pending = False
-        self.lbl_busy.visible = False
-        self._show_messages()
+  # ── setup ────────────────────────────────────────────────────────
 
-    @handle("lk_new_chat", "click")
-    def lk_new_chat_click(self, **event_args):
-        # Old sessions stay in the database for the question log; just start fresh.
-        self._start_session()
+  def _pick_user(self):
+    """Modal name picker: dropdown of known names + free-text fallback."""
+    names = anvil.server.call('ta_get_users') or []
+    dd = DropDown(items=names, include_placeholder=True,
+                  placeholder="Select your name…")
+    txt = TextBox(placeholder="…or type your name")
+    panel = ColumnPanel()
+    panel.add_component(Label(text="Who's asking?", bold=True))
+    if names:
+      panel.add_component(dd)
+    panel.add_component(txt)
+    while not self.username:
+      alert(content=panel, title="Titan AI",
+            buttons=[("Start", True)], dismissible=False)
+      picked = (txt.text or '').strip() or dd.selected_value
+      self.username = picked or None
 
-    # -- Suggestion chips ----------------------------------------------------
+  def _start_session(self):
+    info = anvil.server.call('ta_start_session', self.username)
+    self.session_id = info['session_id']
+    self.last_message_id = 0
+    self.items = []
+    self.rp_messages.items = self.items
+    self.tmr_poll.interval = 1
 
-    def _load_suggestions(self):
-        self.fp_chips.clear()
-        for text in anvil.server.call("ta_get_suggestions"):
-            chip = Link(text=text, role="secondary-button")
-            chip.set_event_handler("click", self._chip_click)
-            self.fp_chips.add_component(chip)
+  def _build_chips(self):
+    """Suggested questions as clickable Links (Labels are NOT clickable)."""
+    self.fp_chips.clear()
+    for question in anvil.server.call('ta_get_suggested_questions'):
+      chip = Link(text=question, role='outlined-button')
+      chip.tag.question = question
+      chip.set_event_handler('click', self._chip_click)
+      self.fp_chips.add_component(chip)
 
-    def _chip_click(self, **event_args):
-        text = event_args["sender"].text
-        if text.rstrip().endswith("…"):
-            # A stem: drop it into the box for the user to complete.
-            self.txt_question.text = text.rstrip()[:-1].rstrip()
-            self.txt_question.focus()
-        else:
-            self._send(text)
+  def _chip_click(self, sender, **event_args):
+    question = sender.tag.question
+    if question.endswith('…'):
+      # Template chip: put the stem in the box for the user to finish.
+      self.txt_question.text = question.rstrip('…').strip() + ' '
+      self.txt_question.focus()
+    else:
+      self._send(question)
 
-    # -- Sending -------------------------------------------------------------
+  # ── sending ──────────────────────────────────────────────────────
 
-    @handle("btn_send", "click")
-    def btn_send_click(self, **event_args):
-        self._send(self.txt_question.text)
+  def btn_send_click(self, **event_args):
+    self._send(self.txt_question.text)
 
-    @handle("txt_question", "pressed_enter")
-    def txt_question_pressed_enter(self, **event_args):
-        self._send(self.txt_question.text)
+  def txt_question_pressed_enter(self, **event_args):
+    self._send(self.txt_question.text)
 
-    def _send(self, question):
-        question = (question or "").strip()
-        if not question:
-            return
-        self.txt_question.text = ""
-        self.btn_send.enabled = False
-        try:
-            row = anvil.server.call("ta_send_message", self.session_id, question)
-        finally:
-            self.btn_send.enabled = True
-        if row:
-            self.messages.append(row)
-            self.last_id = max(self.last_id, row.get("message_id", self.last_id))
-        self.pending = True
-        self.lbl_busy.visible = True
-        self._show_messages()
-        self._poll()  # pull any immediate status line without waiting for the tick
+  def _send(self, text):
+    text = (text or '').strip()
+    if not text:
+      return
+    self.btn_send.enabled = False
+    try:
+      anvil.server.call('ta_send_message', self.session_id, text)
+      self.txt_question.text = ''
+      self.fp_chips.visible = False       # chips only on an empty chat
+      self.lbl_busy.visible = True
+    except Exception as e:
+      alert(str(e), title="Couldn't send")
+    finally:
+      self.btn_send.enabled = True
 
-    # -- Polling -------------------------------------------------------------
+  def lk_new_chat_click(self, **event_args):
+    self._start_session()
+    self.fp_chips.visible = True
+    self.lbl_busy.visible = False
 
-    @handle("tmr_poll", "tick")
-    def tmr_poll_tick(self, **event_args):
-        if self.pending:
-            self._poll()
+  # ── receiving ────────────────────────────────────────────────────
 
-    def _poll(self):
-        if not self.session_id:
-            return
-        # call_s keeps the loading spinner quiet during background polling.
-        rows = anvil.server.call_s("ta_get_updates", self.session_id, self.last_id)
-        if not rows:
-            return
-        got_answer = False
-        for row in rows:
-            self.last_id = max(self.last_id, row.get("message_id", self.last_id))
-            if row.get("role") in ("assistant", "error"):
-                got_answer = True
-            self.messages.append(row)
-        if got_answer:
-            # Clear transient status lines and stop the busy indicator.
-            self.messages = [m for m in self.messages if m.get("role") != "status"]
-            self.pending = False
-            self.lbl_busy.visible = False
-        self._show_messages()
+  def tmr_poll_tick(self, **event_args):
+    if self.session_id is None:
+      return
+    try:
+      update = anvil.server.call_s(
+        'ta_get_updates', self.session_id, self.last_message_id
+      )
+    except Exception:
+      return  # transient blip; next tick will retry
 
-    # -- Rendering -----------------------------------------------------------
+    new_rows = update['messages']
+    if new_rows:
+      for row in new_rows:
+        self.last_message_id = max(self.last_message_id, row['message_id'])
+        if row['role'] in ('assistant', 'error'):
+          # The turn is over: clear its transient status lines.
+          self.items = [i for i in self.items if i['role'] != 'status']
+        self.items.append(row)
+      self.rp_messages.items = list(self.items)
+      # Keep the newest message in view.
+      panels = self.rp_messages.get_components()
+      if panels:
+        panels[-1].scroll_into_view()
 
-    def _show_messages(self):
-        self.rp_messages.items = list(self.messages)
+    self.lbl_busy.visible = update['busy']

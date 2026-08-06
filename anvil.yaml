@@ -35,12 +35,33 @@ runtime_options:
   client_version: '3'
   server_spec: {base: python310-minimal}
   version: 3
+secrets:
+  NEXUS_DATABASE:
+    type: secret
+    value: {XP4YHGCWAT5JLFLE: qHkALOBN8ifwW2+h9F99NHVnnRjfb8JhEwXm5aTvT5crWeAOJep3wsrrUAyBbDj1GL2BGGki5fQWEn4wPFAPVzXBNX6ijyW39iSY+9I5/paJEZ8yuxSGq1fsi41bWecFWdb/aw==}
+  NEXUS_PASSWORD:
+    type: secret
+    value: {XP4YHGCWAT5JLFLE: 1T06X4AkKAO/QEUW9X+y1ZOV+e1tpQOyUIDjBximIx1x+kU3Y35dH/wF+gu05Tm34X1xdrhxOqiY4dhklZ9OZA2zVvKZb/tRZfZNi2EbN1pVSt8Rf2WM0FDPY34ZiaQlqVHvd/3Ip/OjLdg=}
+  NEXUS_SERVER:
+    type: secret
+    value: {XP4YHGCWAT5JLFLE: UMGfY2S46UFaXK9FbYGQYlsHwhiXFmIMukovK1j/s/wV+xJS3h4Ar0c1jeG4R2LqDIh1tu4A7vZ+RQJ1iW1jCSCqfZDev/CBeDHfDeRec5qBb7767FREvQlkukvK7k+TCNl0fJGiGo75YeLk}
+  NEXUS_USERNAME:
+    type: secret
+    value: {XP4YHGCWAT5JLFLE: 6+EXX0o68xXtRsHgkO6jmJh9T+FyIp/+s/Dd45s1fE7miIgXK2l9yevjWI9jG62qlAwGvP7mjArRrppY9+Kw9xzpJlIFi16GE9bY1lzjQCCNM1NrReO10qs6RGiDzHnpW/s65eVWkhU=}
 services:
 - client_config: {enable_v2: true}
   server_config: {}
   source: /runtime/services/tables.yml
 - client_config: {allow_signup: false, use_email: true, use_token: false}
-  server_config: {user_table: users}
+  server_config:
+    email_content:
+      reset_password:
+        html: |-
+          <p>Hi there,</p>
+          <p>You have requested a password reset for your account {{email}}. To reset your password, click the link below:</p>
+          <p>{{reset_link}}</p>
+          <p>This link will expire in ten minutes.</p>
+    user_table: users
   source: /runtime/services/anvil/users.yml
 - client_config: {}
   server_config: {}
