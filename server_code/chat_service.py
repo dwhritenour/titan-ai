@@ -38,6 +38,11 @@ from . import db_config
 # is inconvenient, not blocking.
 USERS = [
   "Dave",
+  "Veronica",
+  "Anthony",
+  "Tara",
+  "Kim",
+  "Chuck",
   # add the other ~4 users here
 ]
 

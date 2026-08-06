@@ -17,6 +17,8 @@ Components referenced (names must match the designer):
     tmr_poll           Timer      interval 1 (seconds)
 """
 
+from datetime import datetime
+
 import anvil.server
 from anvil import Link, DropDown, TextBox, ColumnPanel, Label, alert
 
@@ -33,15 +35,46 @@ class TitanAIChat(TitanAIChatTemplate):
     self.last_message_id = 0
     self.items = []          # rows currently shown in rp_messages
 
-    # Colors set in code (house rule): grey #616161 for the busy line —
-    # medium grey, clearly secondary to the black message text.
-    self.lbl_busy.foreground = "#616161"
+    # Claude-style skin: all styling lives in theme.css via these
+    # roles (defined in theme parameters). No colors hardcoded here.
+    self.cp_main.role = 'ta-app'
+    self.lbl_title.role = 'ta-brand'          # CSS adds the ✦ spark
+    self.lbl_subtitle.role = 'ta-tagline'
+    self.lbl_subtitle.text = "Read-only assistant · decisions stay in the apps"
+    self.lk_new_chat.role = 'ta-newchat'
+    self.lk_new_chat.text = "+ New chat"
+    self.lbl_busy.role = 'ta-status'          # animated pulse via CSS
+    self.lbl_busy.text = "Titan AI is thinking…"
     self.lbl_busy.visible = False
+    self.btn_send.role = 'ta-send'
+    self.btn_send.text = "↑"
+    self.fp_input.role = 'ta-inputbar'
+
+    # Wire events IN CODE so designer wiring is not required.
+    # (set_event_handler replaces any designer-set handler — no double fire.)
+    self.btn_send.set_event_handler('click', self.btn_send_click)
+    self.txt_question.set_event_handler('pressed_enter',
+                                        self.txt_question_pressed_enter)
+    self.lk_new_chat.set_event_handler('click', self.lk_new_chat_click)
+    self.tmr_poll.set_event_handler('tick', self.tmr_poll_tick)
 
     # No Anvil Users service — matches the rest of the app family.
     # Identity is a picked name (SE-kiosk pattern), used for the
     # question log, feedback attribution, and the rate limiter.
     self._pick_user()
+
+    # Greeting (empty state) — inserted in code, no designer change.
+    hour = datetime.now().hour
+    part = "Morning" if hour < 12 else ("Afternoon" if hour < 17 else "Evening")
+    self.lbl_greeting = Label(text=f"{part}, {self.username}.",
+                              role='ta-greeting')
+    self.cp_main.add_component(self.lbl_greeting, index=2)  # before fp_chips
+
+    # Hint line under the input — also code-only.
+    self.lbl_hint = Label(
+      text="Titan AI reads live Nexus data · answers may lag the last e21 sync by ~15 min",
+      role='ta-hint')
+    self.cp_main.add_component(self.lbl_hint)
 
     self._start_session()
     self._build_chips()
@@ -77,7 +110,7 @@ class TitanAIChat(TitanAIChatTemplate):
     """Suggested questions as clickable Links (Labels are NOT clickable)."""
     self.fp_chips.clear()
     for question in anvil.server.call('ta_get_suggested_questions'):
-      chip = Link(text=question, role='outlined-button')
+      chip = Link(text=question, role='ta-chip')
       chip.tag.question = question
       chip.set_event_handler('click', self._chip_click)
       self.fp_chips.add_component(chip)
@@ -108,6 +141,7 @@ class TitanAIChat(TitanAIChatTemplate):
       anvil.server.call('ta_send_message', self.session_id, text)
       self.txt_question.text = ''
       self.fp_chips.visible = False       # chips only on an empty chat
+      self.lbl_greeting.visible = False
       self.lbl_busy.visible = True
     except Exception as e:
       alert(str(e), title="Couldn't send")
@@ -117,6 +151,7 @@ class TitanAIChat(TitanAIChatTemplate):
   def lk_new_chat_click(self, **event_args):
     self._start_session()
     self.fp_chips.visible = True
+    self.lbl_greeting.visible = True
     self.lbl_busy.visible = False
 
   # ── receiving ────────────────────────────────────────────────────

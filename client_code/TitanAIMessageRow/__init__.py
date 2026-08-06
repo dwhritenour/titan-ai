@@ -30,16 +30,26 @@ class TitanAIMessageRow(TitanAIMessageRowTemplate):
   def __init__(self, **properties):
     self.init_components(**properties)
 
+    # Wire events IN CODE so designer wiring is not required.
+    self.lk_trace.set_event_handler('click', self.lk_trace_click)
+    self.lk_thumbs_up.set_event_handler('click', self.lk_thumbs_up_click)
+    self.lk_thumbs_down.set_event_handler('click', self.lk_thumbs_down_click)
+
     item = self.item
     role = item['role']
 
-    # Colors set in code (house rule — hex + description):
-    #   user bubble    #E8F0FE  very light blue, matches filled-button tint
-    #   status line    #616161  medium grey, secondary
-    #   error line     #B3261E  Material error red (dark enough on white)
-    self.cp_user.background = "#E8F0FE"
-    self.lbl_status.foreground = "#616161"
-    self.lbl_error.foreground = "#B3261E"
+    # Claude-style skin: styling lives in theme.css via these roles.
+    # (Parchment bubble #F0EEE6, faint grey status, error red #B3261E —
+    # all defined once in the theme, not per-component here.)
+    self.cp_user.role = 'ta-user-bubble'
+    self.rt_answer.role = 'ta-answer'
+    self.fp_actions.role = 'ta-actions'
+    self.lk_thumbs_up.role = 'ta-action'
+    self.lk_thumbs_down.role = 'ta-action'
+    self.lk_trace.role = 'ta-action'
+    self.rt_trace.role = 'ta-trace'
+    self.lbl_status.role = 'ta-status'
+    self.lbl_error.role = 'ta-error'
 
     self.cp_user.visible = role == 'user'
     self.cp_assistant.visible = role == 'assistant'

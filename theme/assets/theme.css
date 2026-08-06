@@ -1,17 +1,17 @@
 :root {
   --blank-bg: %color:Background%;
-  --blank-surface: %color:Surface%;
-  --blank-text: %color:Text%;
-  --blank-muted: %color:Muted%;
-  --blank-border: %color:Border%;
-  --blank-primary: %color:Primary%;
-  --blank-primary-dark: %color:Primary Dark%;
-  --blank-focus-ring: %color:Focus Ring%;
-  --blank-control-bg: %color:Control Background%;
-  --blank-control-bg-hover: %color:Control Background Hover%;
-  --blank-control-disabled: %color:Control Disabled%;
-  --blank-surface-muted: %color:Surface Muted%;
-  --anvil-banner-height: %anvil-banner-height%;
+--blank-surface: %color:Surface%;
+--blank-text: %color:Text%;
+--blank-muted: %color:Muted%;
+--blank-border: %color:Border%;
+--blank-primary: %color:Primary%;
+--blank-primary-dark: %color:Primary Dark%;
+--blank-focus-ring: %color:Focus Ring%;
+--blank-control-bg: %color:Control Background%;
+--blank-control-bg-hover: %color:Control Background Hover%;
+--blank-control-disabled: %color:Control Disabled%;
+--blank-surface-muted: %color:Surface Muted%;
+--anvil-banner-height: %anvil-banner-height%;
 }
 
 body {
@@ -272,4 +272,277 @@ textarea.anvil-text-area:disabled,
   .anvil-role-h1 {
     font-size: 28px;
   }
+}
+
+/* ═════════════════════════════════════════════════════════════════
+TITAN AI — Claude-Desktop-style chat skin (2026-08-06)
+Colors come from the theme color scheme (parameters.yaml):
+Background #FAF9F5 warm off-white · Text #1F1E1D warm ink
+Muted #6E6A60 · Border #E5E2D9 · Primary #C96442 terracotta
+Surface Muted #F5F4EE · Control Disabled #F0EEE6 (parchment)
+Roles below are assigned in the form code, not the designer.
+═════════════════════════════════════════════════════════════════ */
+
+/* ── App column: centered reading width ── */
+.anvil-role-ta-app {
+  max-width: 760px;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding: 8px 20px 30px;
+}
+
+/* ── Header ── */
+.anvil-role-ta-brand,
+.anvil-role-ta-brand .label-text {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  color: var(--blank-text);
+}
+.anvil-role-ta-brand .label-text::before {
+  content: "\2726\00a0";              /* ✦ spark */
+  color: var(--blank-primary);
+}
+
+.anvil-role-ta-newchat,
+.anvil-role-ta-newchat a {
+  font-size: 13.5px !important;
+  font-weight: 400 !important;
+  color: var(--blank-muted) !important;
+  text-decoration: none !important;
+  border: 1px solid var(--blank-border);
+  border-radius: 999px;
+  padding: 5px 16px !important;
+  background: var(--blank-surface);
+  transition: all .15s;
+}
+.anvil-role-ta-newchat:hover,
+.anvil-role-ta-newchat a:hover {
+  border-color: var(--blank-primary);
+  color: var(--blank-primary) !important;
+}
+
+.anvil-role-ta-tagline,
+.anvil-role-ta-tagline .label-text {
+  font-size: 13px;
+  color: #9B968A;                     /* faint warm grey */
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--blank-border);
+}
+
+/* ── Empty state ── */
+.anvil-role-ta-greeting,
+.anvil-role-ta-greeting .label-text {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+  text-align: center;
+  padding-top: 40px;
+  color: var(--blank-text);
+}
+
+.anvil-role-ta-chip,
+.anvil-role-ta-chip a {
+  font-size: 13.5px !important;
+  font-weight: 400 !important;
+  color: var(--blank-text) !important;
+  text-decoration: none !important;
+  background: var(--blank-surface);
+  border: 1px solid var(--blank-border);
+  border-radius: 999px;
+  padding: 7px 16px !important;
+  margin: 4px 3px;
+  display: inline-block;
+  transition: all .15s;
+}
+.anvil-role-ta-chip:hover,
+.anvil-role-ta-chip a:hover {
+  border-color: var(--blank-primary);
+  background: #F5E8E0;                /* soft terracotta tint */
+}
+
+/* ── User bubble (right-aligned parchment) ── */
+.anvil-role-ta-user-bubble {
+  background: #F0EEE6 !important;     /* warm parchment */
+  border-radius: 18px;
+  width: fit-content;
+  max-width: 78%;
+  margin-left: auto !important;
+  margin-top: 14px;
+  padding: 2px 16px;
+}
+.anvil-role-ta-user-bubble .label-text {
+  font-size: 15px;
+  font-weight: 400;
+}
+
+/* ── Assistant answer: open text + carded tables ── */
+.anvil-role-ta-answer {
+  font-size: 15px;
+  line-height: 1.6;
+  margin-top: 14px;
+}
+.anvil-role-ta-answer table {
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13.5px;
+  width: 100%;
+  background: var(--blank-surface);
+  border: 1px solid var(--blank-border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(31,30,29,.05);
+}
+.anvil-role-ta-answer th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--blank-muted);
+  font-size: 12px;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  padding: 8px 13px;
+  background: var(--blank-surface-muted);
+  border-bottom: 1px solid var(--blank-border);
+}
+.anvil-role-ta-answer td {
+  padding: 7px 13px;
+  border-bottom: 1px solid #F0EFE9;
+}
+.anvil-role-ta-answer tr:last-child td { border-bottom: none; }
+.anvil-role-ta-answer code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  background: var(--blank-surface-muted);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--blank-text);
+}
+
+/* ── Actions row (thumbs + trace toggle) ── */
+.anvil-role-ta-actions { margin-top: 2px; }
+.anvil-role-ta-action,
+.anvil-role-ta-action a {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: #9B968A !important;
+  text-decoration: none !important;
+  padding: 3px 8px !important;
+  border-radius: 8px;
+  transition: all .15s;
+}
+.anvil-role-ta-action:hover,
+.anvil-role-ta-action a:hover {
+  background: #F0EEE6;
+  color: var(--blank-text) !important;
+}
+
+/* ── Tool trace block ── */
+.anvil-role-ta-trace {
+  border-left: 3px solid var(--blank-border);
+  background: var(--blank-surface-muted);
+  border-radius: 0 10px 10px 0;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--blank-muted);
+  margin-top: 6px;
+}
+.anvil-role-ta-trace pre,
+.anvil-role-ta-trace code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  background: var(--blank-surface);
+  border: 1px solid var(--blank-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  white-space: pre-wrap;
+  color: var(--blank-text);
+}
+
+/* ── Status / thinking line with animated pulse ── */
+.anvil-role-ta-status,
+.anvil-role-ta-status .label-text {
+  font-size: 13.5px;
+  font-style: italic;
+  color: #9B968A;
+  margin-top: 10px;
+}
+.anvil-role-ta-status .label-text::before {
+  content: "\25CF";                   /* ● */
+  font-style: normal;
+  color: var(--blank-primary);
+  margin-right: 8px;
+  display: inline-block;
+  animation: ta-pulse 1.2s ease-in-out infinite;
+}
+@keyframes ta-pulse {
+  0%, 100% { opacity: .25; transform: scale(.85); }
+  50%      { opacity: 1;   transform: scale(1); }
+}
+
+/* ── Error line ── */
+.anvil-role-ta-error,
+.anvil-role-ta-error .label-text {
+  color: #B3261E;                     /* Material error red */
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+/* ── Input pill ── */
+.anvil-role-ta-inputbar {
+  background: var(--blank-surface);
+  border: 1px solid var(--blank-border);
+  border-radius: 24px;
+  padding: 5px 6px 5px 18px !important;
+  box-shadow: 0 2px 12px rgba(31,30,29,.07);
+  margin-top: 18px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.anvil-role-ta-inputbar:focus-within {
+  border-color: var(--blank-primary);
+  box-shadow: 0 2px 16px rgba(201,100,66,.12);
+}
+/* lay the pill's children out on one flexible row */
+.anvil-role-ta-inputbar > .flow-panel,
+.anvil-role-ta-inputbar .flow-panel {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+}
+.anvil-role-ta-inputbar .flow-panel-item { float: none !important; }
+.anvil-role-ta-inputbar .flow-panel-item:first-child { flex: 1; }
+.anvil-role-ta-inputbar input.anvil-text-box {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  min-height: 40px;
+  font-size: 15px;
+  width: 100%;
+}
+
+/* ── Round send button ── */
+.anvil-role-ta-send > button {
+  width: 38px;
+  height: 38px;
+  min-height: 38px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  font-size: 17px;
+  line-height: 1;
+  background: var(--blank-primary);
+  color: #fff;
+}
+.anvil-role-ta-send > button:hover,
+.anvil-role-ta-send > button:focus {
+  background: var(--blank-primary-dark);
+}
+
+/* ── Hint under the input ── */
+.anvil-role-ta-hint,
+.anvil-role-ta-hint .label-text {
+  font-size: 11.5px;
+  color: #9B968A;
+  text-align: center;
+  margin-top: 6px;
 }
