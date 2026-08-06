@@ -1,18 +1,18 @@
 <anvil-form container="ColumnPanel">
   <anvil-component type="ColumnPanel" name="cp_row">
-    <anvil-component type="ColumnPanel" name="cp_user" prop:role="card">
+    <anvil-component type="ColumnPanel" name="cp_user" prop:role="card" prop:spacing='{"padding":[null,null,null,null],"margin":["0",null,"0",null]}'>
       <anvil-component type="Label" name="lbl_user" prop:bold="true" prop:spacing='{"margin":["0",null,"0",null],"padding":["0",null,"0",null]}'></anvil-component>
     </anvil-component>
     <anvil-component type="ColumnPanel" name="cp_assistant">
       <anvil-component type="RichText" name="rt_answer" prop:format="markdown" prop:spacing='{"margin":["0",null,"0",null],"padding":["0",null,"0",null]}'></anvil-component>
       <anvil-component type="FlowPanel" name="fp_actions" prop:spacing='{"margin":["0",null,"0",null]}'>
-        <anvil-component type="Link" name="lk_thumbs_up" prop:text="👍"></anvil-component>
+        <anvil-component type="Link" name="lk_thumbs_up" prop:text="👍" prop:spacing='{"margin":["0",null,"0",null]}'></anvil-component>
         <anvil-component type="Link" name="lk_thumbs_down" prop:text="👎" prop:spacing='{"margin":["0",null,"0",null]}'></anvil-component>
         <anvil-component type="Link" name="lk_trace" prop:text="How I got this" prop:spacing='{"margin":["0",null,"0",null]}'></anvil-component>
       </anvil-component>
-      <anvil-component type="RichText" name="rt_trace" prop:format="markdown" prop:visible="false"></anvil-component>
+      <anvil-component type="RichText" name="rt_trace" prop:format="markdown" prop:visible="false" prop:spacing='{"margin":["0",null,"0",null],"padding":["0",null,"0",null]}'></anvil-component>
     </anvil-component>
-    <anvil-component type="Label" name="lbl_status"></anvil-component>
-    <anvil-component type="Label" name="lbl_error"></anvil-component>
+    <anvil-component type="Label" name="lbl_status" prop:spacing='{"margin":["0",null,"0",null],"padding":["0",null,"0",null]}'></anvil-component>
+    <anvil-component type="Label" name="lbl_error" prop:spacing='{"margin":["0",null,"0",null],"padding":["0",null,"0",null]}'></anvil-component>
   </anvil-component>
 </anvil-form>
