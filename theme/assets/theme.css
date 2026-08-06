@@ -503,15 +503,17 @@ Roles below are assigned in the form code, not the designer.
   border-color: var(--blank-primary);
   box-shadow: 0 2px 16px rgba(201,100,66,.12);
 }
-/* lay the pill's children out on one flexible row */
-.anvil-role-ta-inputbar > .flow-panel,
-.anvil-role-ta-inputbar .flow-panel {
-  display: flex !important;
+/* lay the pill's children out on one flexible row
+(verified DOM 2026-08-06: .anvil-flow-panel-gutter is already
+display:flex; items are .anvil-flow-panel-item) */
+.anvil-role-ta-inputbar .anvil-flow-panel-gutter {
   align-items: center;
   gap: 6px;
 }
-.anvil-role-ta-inputbar .flow-panel-item { float: none !important; }
-.anvil-role-ta-inputbar .flow-panel-item:first-child { flex: 1; }
+.anvil-role-ta-inputbar .anvil-flow-panel-item:first-child { flex: 1; }
+.anvil-role-ta-inputbar .anvil-flow-panel-item:first-child input.anvil-text-box {
+  width: 100%;
+}
 .anvil-role-ta-inputbar input.anvil-text-box {
   border: none !important;
   box-shadow: none !important;
