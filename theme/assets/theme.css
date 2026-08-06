@@ -293,14 +293,14 @@ Roles below are assigned in the form code, not the designer.
 
 /* ── Header ── */
 .anvil-role-ta-brand,
-.anvil-role-ta-brand .label-text {
+.anvil-role-ta-brand .anvil-label-text {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 26px;
   font-weight: 600;
   letter-spacing: -0.3px;
   color: var(--blank-text);
 }
-.anvil-role-ta-brand .label-text::before {
+.anvil-role-ta-brand .anvil-label-text::before {
   content: "\2726\00a0";              /* ✦ spark */
   color: var(--blank-primary);
 }
@@ -324,7 +324,7 @@ Roles below are assigned in the form code, not the designer.
 }
 
 .anvil-role-ta-tagline,
-.anvil-role-ta-tagline .label-text {
+.anvil-role-ta-tagline .anvil-label-text {
   font-size: 13px;
   color: #9B968A;                     /* faint warm grey */
   padding-bottom: 12px;
@@ -333,7 +333,7 @@ Roles below are assigned in the form code, not the designer.
 
 /* ── Empty state ── */
 .anvil-role-ta-greeting,
-.anvil-role-ta-greeting .label-text {
+.anvil-role-ta-greeting .anvil-label-text {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 28px;
   font-weight: 500;
@@ -373,7 +373,7 @@ Roles below are assigned in the form code, not the designer.
   margin-top: 14px;
   padding: 2px 16px;
 }
-.anvil-role-ta-user-bubble .label-text {
+.anvil-role-ta-user-bubble .anvil-label-text {
   font-size: 15px;
   font-weight: 400;
 }
@@ -462,13 +462,13 @@ Roles below are assigned in the form code, not the designer.
 
 /* ── Status / thinking line with animated pulse ── */
 .anvil-role-ta-status,
-.anvil-role-ta-status .label-text {
+.anvil-role-ta-status .anvil-label-text {
   font-size: 13.5px;
   font-style: italic;
   color: #9B968A;
   margin-top: 10px;
 }
-.anvil-role-ta-status .label-text::before {
+.anvil-role-ta-status .anvil-label-text::before {
   content: "\25CF";                   /* ● */
   font-style: normal;
   color: var(--blank-primary);
@@ -483,7 +483,7 @@ Roles below are assigned in the form code, not the designer.
 
 /* ── Error line ── */
 .anvil-role-ta-error,
-.anvil-role-ta-error .label-text {
+.anvil-role-ta-error .anvil-label-text {
   color: #B3261E;                     /* Material error red */
   font-size: 14px;
   margin-top: 10px;
@@ -540,9 +540,32 @@ Roles below are assigned in the form code, not the designer.
 
 /* ── Hint under the input ── */
 .anvil-role-ta-hint,
-.anvil-role-ta-hint .label-text {
+.anvil-role-ta-hint .anvil-label-text {
   font-size: 11.5px;
   color: #9B968A;
   text-align: center;
   margin-top: 6px;
+}
+
+/* ── FINAL PALETTE OVERRIDE (2026-08-06) ─────────────────────────
+The designer's stored color scheme wins over a git-pushed
+parameters.yaml, so the served CSS vars stayed on the old blue
+palette. This block, being last, overrides the :root at the top
+of this file and forces the Claude palette regardless of what
+the designer thinks. If colors are ever changed in the designer
+UI, delete this block to hand control back.
+──────────────────────────────────────────────────────────────── */
+:root {
+  --blank-bg: #FAF9F5;                       /* warm off-white */
+  --blank-surface: #FFFFFF;
+  --blank-text: #1F1E1D;                     /* warm ink */
+  --blank-muted: #6E6A60;
+  --blank-border: #E5E2D9;
+  --blank-primary: #C96442;                  /* terracotta */
+  --blank-primary-dark: #B4562F;
+  --blank-focus-ring: rgba(201, 100, 66, 0.15);
+  --blank-control-bg: #FFFFFF;
+  --blank-control-bg-hover: #FDFCF9;
+  --blank-control-disabled: #F0EEE6;         /* parchment */
+  --blank-surface-muted: #F5F4EE;
 }
