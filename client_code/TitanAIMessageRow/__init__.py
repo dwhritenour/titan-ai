@@ -21,6 +21,7 @@ Components referenced (names must match the designer):
 """
 
 import anvil.server
+import anvil.media
 
 from ._anvil_designer import TitanAIMessageRowTemplate
 
@@ -52,11 +53,21 @@ class TitanAIMessageRow(TitanAIMessageRowTemplate):
     self.lbl_error.role = 'ta-error'
 
     self.cp_user.visible = role == 'user'
-    self.cp_assistant.visible = role == 'assistant'
+    self.cp_assistant.visible = role in ('assistant', 'file')
     self.lbl_status.visible = role == 'status'
     self.lbl_error.visible = role == 'error'
 
-    if role == 'user':
+    if role == 'file':
+      # Download chip: reuse the assistant block; the trace link becomes
+      # the download link (set_event_handler REPLACES the trace handler).
+      self.rt_answer.content = f"📄 **{item['content']}** is ready."
+      self.lk_thumbs_up.visible = False
+      self.lk_thumbs_down.visible = False
+      self.rt_trace.visible = False
+      self.lk_trace.text = "⬇ Download Excel"
+      self.lk_trace.visible = True
+      self.lk_trace.set_event_handler('click', self._download_click)
+    elif role == 'user':
       self.lbl_user.text = item['content']
     elif role == 'assistant':
       self.rt_answer.content = item['content']   # markdown
@@ -68,6 +79,16 @@ class TitanAIMessageRow(TitanAIMessageRowTemplate):
       self.lbl_status.text = item['content']
     elif role == 'error':
       self.lbl_error.text = item['content']
+
+  # ── file download ────────────────────────────────────────────────
+
+  def _download_click(self, **event_args):
+    try:
+      media = anvil.server.call('ta_get_file', self.item['file_id'])
+      anvil.media.download(media)
+    except Exception as e:
+      from anvil import alert
+      alert(str(e), title="Download failed")
 
   # ── "How I got this" expander ────────────────────────────────────
 

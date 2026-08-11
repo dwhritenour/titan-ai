@@ -193,7 +193,7 @@ def ta_get_updates(session_id, after_message_id):
 
     cursor.execute(
       """
-      SELECT message_id, role, content, tool_trace, created_at
+      SELECT message_id, role, content, tool_trace, file_id, created_at
       FROM dbo.tai_chat_messages
       WHERE session_id = %s AND message_id > %s
       ORDER BY message_id
@@ -213,6 +213,7 @@ def ta_get_updates(session_id, after_message_id):
         'role': r['role'],
         'content': r['content'],
         'tool_trace': trace,
+        'file_id': r['file_id'],
         'created_at': r['created_at'],
       })
 
@@ -229,6 +230,34 @@ def ta_get_updates(session_id, after_message_id):
     busy = cursor.fetchone()['n'] > 0
 
     return {'messages': messages, 'busy': busy}
+  finally:
+    conn.close()
+
+
+# =============================================================================
+# FILE DOWNLOADS (Excel exports)
+# =============================================================================
+
+@anvil.server.callable
+def ta_get_file(file_id):
+  """Return an export file as downloadable media."""
+  import anvil
+  conn = _get_connection()
+  try:
+    cursor = conn.cursor()
+    cursor.execute(
+      """
+      SELECT filename, content_type, file_bytes
+      FROM dbo.tai_chat_files
+      WHERE file_id = %s
+      """,
+      (file_id,)
+    )
+    row = cursor.fetchone()
+    if row is None:
+      raise ValueError("That file no longer exists.")
+    return anvil.BlobMedia(
+      row['content_type'], bytes(row['file_bytes']), name=row['filename'])
   finally:
     conn.close()
 
