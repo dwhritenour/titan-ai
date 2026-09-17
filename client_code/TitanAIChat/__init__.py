@@ -20,7 +20,8 @@ Components referenced (names must match the designer):
 from datetime import datetime
 
 import anvil.server
-from anvil import Link, DropDown, TextBox, ColumnPanel, Label, alert
+from anvil import (Link, DropDown, TextBox, ColumnPanel, Label, alert,
+Notification)
 
 from ._anvil_designer import TitanAIChatTemplate
 
@@ -96,11 +97,29 @@ class TitanAIChat(TitanAIChatTemplate):
       alert(content=panel, title="Titan AI",
             buttons=[("Start", True)], dismissible=False)
       picked = (txt.text or '').strip() or dd.selected_value
+      # Guard: people sometimes type their QUESTION (or a SKU) into
+      # the name box — real names have no '?', digits or underscores.
+      if picked and ('?' in picked or len(picked) > 40
+                     or len(picked.split()) > 3
+                     or any(ch.isdigit() for ch in picked)
+                     or '_' in picked):
+        Notification("That looks like a question — pick your name first; "
+                     "you can ask it once the chat opens.",
+                     style="warning", timeout=4).show()
+        txt.text = ''
+        picked = None
       self.username = picked or None
 
   def _start_session(self):
     info = anvil.server.call('ta_start_session', self.username)
     self.session_id = info['session_id']
+    # Adopt the server's canonical spelling (kayla/KAYLA -> Kayla) so
+    # the greeting and the usage log agree.
+    self.username = info['username']
+    if getattr(self, 'lbl_greeting', None) is not None:
+      hour = datetime.now().hour
+      part = "Morning" if hour < 12 else ("Afternoon" if hour < 17 else "Evening")
+      self.lbl_greeting.text = f"{part}, {self.username}."
     self.last_message_id = 0
     self.items = []
     self.rp_messages.items = self.items

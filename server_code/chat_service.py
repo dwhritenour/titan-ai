@@ -35,16 +35,52 @@ from . import db_config
 
 # Names shown in the "Who's asking?" picker. EDIT THIS LIST as the
 # user group changes — free-text fallback is allowed, so an omission
-# is inconvenient, not blocking.
+# is inconvenient, not blocking. Casing here is canonical: whatever
+# a user types is matched case-insensitively and stored THIS way.
 USERS = [
-  "Dave",
-  "Veronica",
   "Anthony",
-  "Tara",
-  "Kim",
+  "Blake",
   "Chuck",
-  # add the other ~4 users here
+  "Dave",
+  "Gina",
+  "Gustavo",
+  "JR",
+  "Kayla",
+  "Kim",
+  "Pratik",
+  "Tara",
 ]
+
+# Free-text spellings that map to a canonical name above (compared
+# lowercase). Keeps one identity per person in the usage stats.
+USER_ALIASES = {
+  "kimberly": "Kim",
+  "anthony cabral": "Anthony",
+  "jr.": "JR",
+  "junior": "JR",
+}
+
+
+def _canonical_username(raw):
+  """Map any spelling/casing to the canonical roster name."""
+  key = (raw or '').strip().lower()
+  if not key:
+    return None
+  if key in USER_ALIASES:
+    return USER_ALIASES[key]
+  for name in USERS:
+    if key == name.lower():
+      return name
+  return (raw or '').strip()[:100]        # unknown name: keep as typed
+
+
+def _looks_like_question(name):
+  """People sometimes type their QUESTION (or a SKU) into the name
+  box — catch the obvious cases. Real names have no digits, no '?',
+  no underscores, and at most ~3 words."""
+  n = (name or '').strip()
+  return ('?' in n) or (len(n) > 40) or (len(n.split()) > 3) \
+  or any(ch.isdigit() for ch in n) or ('_' in n)
 
 # Rate limit: questions per user per hour (5-user app; this is a
 # guardrail against a runaway Timer bug, not against people).
@@ -91,6 +127,12 @@ def ta_start_session(username):
   username = (username or '').strip()[:100]
   if not username:
     raise ValueError("Please pick or type your name first.")
+  if _looks_like_question(username):
+    raise ValueError(
+      "That looks like a question, not a name — pick your name first; "
+      "you can ask your question once the chat opens."
+    )
+  username = _canonical_username(username)
   conn = _get_connection()
   try:
     cursor = conn.cursor()
