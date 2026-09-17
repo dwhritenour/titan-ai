@@ -193,6 +193,28 @@ def ta_send_message(session_id, text):
         "Give it a few minutes and try again."
       )
 
+    # Duplicate guard (2026-09-17): a held Enter key / double click can
+    # fire several identical sends before the first returns (observed:
+    # the same question queued 5x in one second — each duplicate burns
+    # a full agent run). If the newest user message in this session has
+    # the SAME text within the last 10 seconds, return ITS id instead
+    # of inserting again — idempotent from the client's point of view.
+    cursor.execute(
+      """
+      SELECT TOP 1 message_id, content,
+             DATEDIFF(second, created_at, GETDATE()) AS age_seconds
+      FROM dbo.tai_chat_messages
+      WHERE session_id = %s AND role = 'user'
+      ORDER BY message_id DESC
+      """,
+      (session_id,)
+    )
+    last = cursor.fetchone()
+    if (last is not None and last['content'] == text
+        and last['age_seconds'] <= 10):
+      conn.commit()
+      return last['message_id']
+
     cursor.execute(
       """
       INSERT INTO dbo.tai_chat_messages (session_id, role, content, status)

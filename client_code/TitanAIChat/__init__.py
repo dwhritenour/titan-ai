@@ -183,6 +183,13 @@ class TitanAIChat(TitanAIChatTemplate):
     text = (text or '').strip()
     if not text:
       return
+    # Debounce (2026-09-17): pressed_enter fires _send directly, so a
+    # held/re-tapped Enter key could queue the same question several
+    # times while the first server call was still in flight (observed
+    # 5x in one second). One in-flight send at a time, full stop.
+    if getattr(self, '_sending', False):
+      return
+    self._sending = True
     self.btn_send.enabled = False
     try:
       anvil.server.call('ta_send_message', self.session_id, text)
@@ -193,6 +200,7 @@ class TitanAIChat(TitanAIChatTemplate):
     except Exception as e:
       alert(str(e), title="Couldn't send")
     finally:
+      self._sending = False
       self.btn_send.enabled = True
 
   def lk_new_chat_click(self, **event_args):
