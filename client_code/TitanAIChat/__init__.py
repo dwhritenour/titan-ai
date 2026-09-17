@@ -20,8 +20,8 @@ Components referenced (names must match the designer):
 from datetime import datetime
 
 import anvil.server
-from anvil import (Link, DropDown, TextBox, ColumnPanel, Label, alert,
-Notification)
+from anvil import (Link, DropDown, TextBox, TextArea, ColumnPanel, Label,
+alert, Notification)
 
 from ._anvil_designer import TitanAIChatTemplate
 
@@ -77,6 +77,12 @@ class TitanAIChat(TitanAIChatTemplate):
       role='ta-hint')
     self.cp_main.add_component(self.lbl_hint)
 
+    # "Suggest an improvement" — app-level feedback (replaced the
+    # per-message thumbs, 2026-09-17). Code-only, no designer change.
+    self.lk_suggest = Link(text="💡 Suggest an improvement", role='ta-hint')
+    self.lk_suggest.set_event_handler('click', self._suggest_click)
+    self.cp_main.add_component(self.lk_suggest)
+
     self._start_session()
     self._build_chips()
 
@@ -109,6 +115,28 @@ class TitanAIChat(TitanAIChatTemplate):
         txt.text = ''
         picked = None
       self.username = picked or None
+
+  # ── suggestions ──────────────────────────────────────────────────
+
+  def _suggest_click(self, **event_args):
+    """App-level feedback dialog → dbo.tai_suggestions."""
+    box = TextArea(
+      placeholder="What should Titan AI do better, or learn next?",
+      height=120)
+    panel = ColumnPanel()
+    panel.add_component(Label(text="Suggest an improvement", bold=True))
+    panel.add_component(box)
+    if alert(content=panel, title="Titan AI",
+             buttons=[("Send", True), ("Cancel", False)]):
+      text = (box.text or '').strip()
+      if not text:
+        return
+      try:
+        anvil.server.call('ta_submit_suggestion', self.session_id, text)
+        Notification("Thanks — sent to Dave.",
+                     style="success", timeout=3).show()
+      except Exception as e:
+        alert(str(e), title="Could not send")
 
   def _start_session(self):
     info = anvil.server.call('ta_start_session', self.username)

@@ -19,7 +19,7 @@ Callables:
     ta_start_session(username)                -> session info
     ta_send_message(session_id, text)         -> message_id
     ta_get_updates(session_id, after_id)      -> new rows + busy flag
-    ta_submit_feedback(message_id, rating, comment=None)
+    ta_submit_suggestion(session_id, text)    -> store an improvement idea
     ta_get_suggested_questions()              -> list of strings
 
 Author: Dave Whritenour / Claude AI Assistant
@@ -305,39 +305,39 @@ def ta_get_file(file_id):
 
 
 # =============================================================================
-# FEEDBACK & SUGGESTIONS
+# SUGGESTIONS
 # =============================================================================
+# 2026-09-17: per-message thumbs (ta_submit_feedback) removed along with
+# the thumbs UI — dbo.tai_chat_feedback keeps its historical rows. User
+# feedback is now the app-level "Suggest an improvement" dialog below.
+
+MAX_SUGGESTION_CHARS = 1000
+
 
 @anvil.server.callable
-def ta_submit_feedback(message_id, rating, comment=None):
-  """Thumbs up (+1) / down (-1) on an assistant answer.
-  Username is taken from the answer's own session."""
-  if rating not in (1, -1):
-    raise ValueError("rating must be 1 or -1")
+def ta_submit_suggestion(session_id, text):
+  """Store a free-text improvement suggestion in dbo.tai_suggestions
+  (migration 070). Username comes from the session, same honor-system
+  identity as everything else."""
+  text = (text or '').strip()
+  if not text:
+    raise ValueError("Please type a suggestion first.")
+  if len(text) > MAX_SUGGESTION_CHARS:
+    raise ValueError(
+      f"That's a bit long ({len(text)} characters, max "
+      f"{MAX_SUGGESTION_CHARS}). Please shorten it."
+    )
 
   conn = _get_connection()
   try:
     cursor = conn.cursor()
+    username = _session_username(cursor, session_id) or 'unknown'
     cursor.execute(
       """
-      SELECT s.username
-      FROM dbo.tai_chat_messages m
-      JOIN dbo.tai_chat_sessions s ON s.session_id = m.session_id
-      WHERE m.message_id = %s AND m.role = 'assistant'
+      INSERT INTO dbo.tai_suggestions (username, suggestion)
+      VALUES (%s, %s)
       """,
-      (message_id,)
-    )
-    row = cursor.fetchone()
-    if row is None:
-      raise ValueError("That message is not an assistant answer.")
-    username = row['username']
-
-    cursor.execute(
-      """
-      INSERT INTO dbo.tai_chat_feedback (message_id, username, rating, comment)
-      VALUES (%s, %s, %s, %s)
-      """,
-      (message_id, username, rating, (comment or None))
+      (username, text)
     )
     conn.commit()
     return True
