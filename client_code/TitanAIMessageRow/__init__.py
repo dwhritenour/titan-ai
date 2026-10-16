@@ -74,6 +74,7 @@ class TitanAIMessageRow(TitanAIMessageRowTemplate):
     elif role == 'assistant':
       self.rt_answer.content = item['content']   # markdown
       # Voice (voice-1.0.0): tap-to-play speaker chip, code-only.
+      self._speak_busy = False
       self.lk_speak = Link(text="🔊 Listen", role='ta-action')
       self.lk_speak.set_event_handler('click', self._speak_click)
       self.fp_actions.add_component(self.lk_speak)
@@ -85,17 +86,21 @@ class TitanAIMessageRow(TitanAIMessageRowTemplate):
   # ── voice (voice-1.0.0) ──────────────────────────────────────────
 
   def _speak_click(self, **event_args):
+    # Links have no 'enabled' property — a flag ignores re-taps
+    # while the audio is being prepared.
+    if self._speak_busy:
+      return
     form = get_open_form()
     if hasattr(form, 'request_speech'):
       form.request_speech(self.item['message_id'], self)
 
   def set_speak_busy(self):
+    self._speak_busy = True
     self.lk_speak.text = "🔊 Preparing audio…"
-    self.lk_speak.enabled = False
 
   def set_speak_ready(self):
+    self._speak_busy = False
     self.lk_speak.text = "🔊 Listen again"
-    self.lk_speak.enabled = True
 
   # ── file download ────────────────────────────────────────────────
 

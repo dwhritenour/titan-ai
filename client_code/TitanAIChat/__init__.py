@@ -64,6 +64,8 @@ class TitanAIChat(TitanAIChatTemplate):
     # Voice (voice-1.0.0): mic button in the input bar, code-only.
     self._recorder = None          # active JS MediaRecorder, else None
     self._rec_chunks = []
+    self._rec_stream = None
+    self._rec_started = 0
     self._speak_pending = {}       # message_id -> row awaiting audio
     self._temp_url = None          # last TempUrl, revoked on next play
     self.lk_mic = Link(text="🎤", role='ta-action')
@@ -235,10 +237,12 @@ class TitanAIChat(TitanAIChatTemplate):
               title="Microphone")
         return
       self._rec_chunks = []
+      self._rec_stream = stream          # keep the stream alive
+      self._rec_started = anvil.js.window.Date.now()
       rec.ondataavailable = self._rec_chunk
       rec.onstop = self._rec_done
-      rec.start()
-      self._recorder = rec
+      rec.start(250)                     # chunk every 250ms — reliable
+      self._recorder = rec               # delivery on every browser
       self.lk_mic.text = "⏹ Stop"
       self.txt_question.placeholder = "Listening… tap ⏹ when done"
     else:
@@ -251,15 +255,36 @@ class TitanAIChat(TitanAIChatTemplate):
     rec, self._recorder = self._recorder, None
     self.lk_mic.text = "🎤"
     self.txt_question.placeholder = "Ask about stock, orders, transfers…"
+    secs = (anvil.js.window.Date.now() - self._rec_started) / 1000.0
     try:
-      for track in rec.stream.getTracks():
+      for track in self._rec_stream.getTracks():
         track.stop()               # release the mic (red-dot indicator)
     except Exception:
       pass
+    self._rec_stream = None
+    if secs < 0.7:
+      Notification("Too short — tap 🎤 once to start, speak, then tap "
+                   "⏹ to stop.", style="warning", timeout=4).show()
+      return
     if not self._rec_chunks:
+      Notification("No audio came back from the recorder — try again.",
+                   style="warning", timeout=4).show()
       return
     mime = rec.mimeType or 'audio/webm'
     blob = anvil.js.window.Blob(self._rec_chunks, {'type': mime})
+    # Sanity: N seconds of real speech is tens of KB. A near-empty blob
+    # means the browser captured SILENCE — almost always the wrong
+    # input device selected in the browser (not the one Windows uses).
+    if blob.size < max(3000, int(secs * 800)):
+      alert(f"The recording was almost empty ({int(blob.size)} bytes "
+            f"from {secs:.1f}s in {len(self._rec_chunks)} chunks) — the "
+            "browser is capturing silence.\n\n"
+            "Click the padlock icon by the address bar → Site settings "
+            "→ Microphone, and check the browser is using the mic you "
+            "tested (browsers keep their own device choice, separate "
+            "from the Windows default).",
+            title="Microphone captured silence")
+      return
     media = anvil.js.to_media(blob)
     try:
       anvil.server.call('ta_submit_voice', self.session_id, media)
