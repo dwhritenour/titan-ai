@@ -26,6 +26,7 @@ and hides them if still present): lk_thumbs_up, lk_thumbs_down,
 rt_trace.
 """
 
+import anvil.js
 import anvil.server
 import anvil.media
 from anvil import Link, get_open_form
@@ -45,6 +46,14 @@ class TitanAIMessageRow(TitanAIMessageRowTemplate):
     self.cp_user.role = 'ta-user-bubble'
     self.rt_answer.role = 'ta-answer'
     self.fp_actions.role = 'ta-actions'
+    # ta-actions has overflow:hidden, and the first chip sits flush
+    # against its left edge — the chip's rounded border gets clipped
+    # on hover. A 4px inset clears it (applies to 🔊 Listen and the
+    # ⬇ Download Excel chip alike).
+    try:
+      anvil.js.get_dom_node(self.fp_actions).style.paddingLeft = '4px'
+    except Exception:
+      pass
     self.lk_trace.role = 'ta-action'
     self.lbl_status.role = 'ta-status'
     self.lbl_error.role = 'ta-error'

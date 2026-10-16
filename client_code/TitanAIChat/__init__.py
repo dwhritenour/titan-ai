@@ -73,6 +73,7 @@ class TitanAIChat(TitanAIChatTemplate):
     self.lk_mic = Link(text="🎤", role='ta-action')
     self.lk_mic.set_event_handler('click', self._mic_click)
     self.fp_input.add_component(self.lk_mic)
+    self._style_mic(recording=False)   # match the 38px send circle
 
     # No Anvil Users service — matches the rest of the app family.
     # Identity is a picked name (SE-kiosk pattern), used for the
@@ -226,6 +227,44 @@ class TitanAIChat(TitanAIChatTemplate):
 
   # ── voice (voice-1.0.0) ──────────────────────────────────────────
 
+  def _style_mic(self, recording):
+    """Size the 🎤 link to sit beside the 38×38 ta-send circle.
+    At rest: a 38px circle (soft beige — ta-send's palette, one shade
+    lighter so the orange ↑ stays the primary action). While recording
+    the text is '⏹ Stop', so the circle relaxes into a pill."""
+    node = anvil.js.get_dom_node(self.lk_mic)
+    st = node.style
+    st.height = '38px'
+    st.background = '#eee7dc'
+    st.display = 'inline-flex'
+    st.alignItems = 'center'
+    st.justifyContent = 'center'
+    st.marginLeft = '4px'
+    st.textDecoration = 'none'
+    st.boxSizing = 'border-box'
+    if recording:
+      st.width = 'auto'
+      st.minWidth = '38px'
+      st.padding = '0 12px'
+      st.borderRadius = '19px'
+      st.fontSize = '14px'
+      inner_px = '14px'
+    else:
+      st.width = '38px'
+      st.minWidth = '38px'
+      st.padding = '0'
+      st.borderRadius = '50%'
+      st.fontSize = '18px'
+      inner_px = '18px'
+    # Anvil wraps Link text in inner spans — size those too, or the
+    # emoji keeps the theme's 13px chip font.
+    try:
+      spans = node.querySelectorAll('span')
+      for i in range(spans.length):
+        spans.item(i).style.fontSize = inner_px
+    except Exception:
+      pass
+
   def _mic_click(self, **event_args):
     """Toggle recording. Tap: record; tap again: stop + transcribe."""
     if self._recorder is None:
@@ -246,6 +285,7 @@ class TitanAIChat(TitanAIChatTemplate):
       rec.start(250)                     # chunk every 250ms — reliable
       self._recorder = rec               # delivery on every browser
       self.lk_mic.text = "⏹ Stop"
+      self._style_mic(recording=True)
       self.txt_question.placeholder = "Listening… tap ⏹ when done"
     else:
       self._recorder.stop()        # _rec_done fires next
@@ -256,6 +296,7 @@ class TitanAIChat(TitanAIChatTemplate):
   def _rec_done(self, event):
     rec, self._recorder = self._recorder, None
     self.lk_mic.text = "🎤"
+    self._style_mic(recording=False)
     self.txt_question.placeholder = "Ask about stock, orders, transfers…"
     secs = (anvil.js.window.Date.now() - self._rec_started) / 1000.0
     try:
