@@ -36,6 +36,10 @@ runtime_options:
   server_spec: {base: python310-minimal}
   version: 3
 secrets:
+  ElevenLabs:
+    type: secret
+    value:
+      XP4YHGCWAT5JLFLE: {all: Fuc98XAfYpFU0TMq5P9/6apNcspilKccAmgq0naWrCOictBHv1+4pc/9Qx0c/sUIfQS1Ei9yJvFJB/Q+AuhlrNlIxNTgx/NWT444JwR2BKG4x1Yb+/JKtV1NdauS15MzFNVujpLwu1b9012Run7IwPqaQWqQAq5GR7lly24WOAhAqyCc6KNBWO2XLkXIf4bAeyla+PSxP3Mh8J8hp2joxK9J/aKjmdJOtsLbf89ujmm0ZwPL8VnV2MSsofQyKBOhPrG0lkJQN1wt+boVwsCf}
   NEXUS_DATABASE:
     type: secret
     value: {XP4YHGCWAT5JLFLE: qHkALOBN8ifwW2+h9F99NHVnnRjfb8JhEwXm5aTvT5crWeAOJep3wsrrUAyBbDj1GL2BGGki5fQWEn4wPFAPVzXBNX6ijyW39iSY+9I5/paJEZ8yuxSGq1fsi41bWecFWdb/aw==}

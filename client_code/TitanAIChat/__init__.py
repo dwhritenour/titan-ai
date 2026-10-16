@@ -19,6 +19,8 @@ Components referenced (names must match the designer):
 
 from datetime import datetime
 
+import anvil.js
+import anvil.media
 import anvil.server
 from anvil import (Link, DropDown, TextBox, TextArea, ColumnPanel, Label,
 alert, Notification)
@@ -58,6 +60,15 @@ class TitanAIChat(TitanAIChatTemplate):
                                         self.txt_question_pressed_enter)
     self.lk_new_chat.set_event_handler('click', self.lk_new_chat_click)
     self.tmr_poll.set_event_handler('tick', self.tmr_poll_tick)
+
+    # Voice (voice-1.0.0): mic button in the input bar, code-only.
+    self._recorder = None          # active JS MediaRecorder, else None
+    self._rec_chunks = []
+    self._speak_pending = {}       # message_id -> row awaiting audio
+    self._temp_url = None          # last TempUrl, revoked on next play
+    self.lk_mic = Link(text="🎤", role='ta-action')
+    self.lk_mic.set_event_handler('click', self._mic_click)
+    self.fp_input.add_component(self.lk_mic)
 
     # No Anvil Users service — matches the rest of the app family.
     # Identity is a picked name (SE-kiosk pattern), used for the
@@ -209,6 +220,107 @@ class TitanAIChat(TitanAIChatTemplate):
     self.lbl_greeting.visible = True
     self.lbl_busy.visible = False
 
+  # ── voice (voice-1.0.0) ──────────────────────────────────────────
+
+  def _mic_click(self, **event_args):
+    """Toggle recording. Tap: record; tap again: stop + transcribe."""
+    if self._recorder is None:
+      try:
+        stream = anvil.js.window.navigator.mediaDevices.getUserMedia(
+          {'audio': True})
+        rec = anvil.js.window.MediaRecorder(stream)
+      except Exception as e:
+        alert(f"Couldn't open the microphone: {e}\n\n"
+              "Check the browser's mic permission for this site.",
+              title="Microphone")
+        return
+      self._rec_chunks = []
+      rec.ondataavailable = self._rec_chunk
+      rec.onstop = self._rec_done
+      rec.start()
+      self._recorder = rec
+      self.lk_mic.text = "⏹ Stop"
+      self.txt_question.placeholder = "Listening… tap ⏹ when done"
+    else:
+      self._recorder.stop()        # _rec_done fires next
+
+  def _rec_chunk(self, event):
+    self._rec_chunks.append(event.data)
+
+  def _rec_done(self, event):
+    rec, self._recorder = self._recorder, None
+    self.lk_mic.text = "🎤"
+    self.txt_question.placeholder = "Ask about stock, orders, transfers…"
+    try:
+      for track in rec.stream.getTracks():
+        track.stop()               # release the mic (red-dot indicator)
+    except Exception:
+      pass
+    if not self._rec_chunks:
+      return
+    mime = rec.mimeType or 'audio/webm'
+    blob = anvil.js.window.Blob(self._rec_chunks, {'type': mime})
+    media = anvil.js.to_media(blob)
+    try:
+      anvil.server.call('ta_submit_voice', self.session_id, media)
+      Notification("Transcribing…", timeout=3).show()
+    except Exception as e:
+      alert(str(e), title="Couldn't send the recording")
+
+  def request_speech(self, message_id, row):
+    """Called by a message row's 🔊 chip."""
+    try:
+      res = anvil.server.call('ta_request_speech',
+                              self.session_id, message_id)
+    except Exception as e:
+      alert(str(e), title="Voice")
+      return
+    if res.get('file_id'):
+      self._play_file(res['file_id'])
+      row.set_speak_ready()
+    else:
+      self._speak_pending[int(message_id)] = row
+      row.set_speak_busy()
+
+  def _play_file(self, file_id):
+    try:
+      media = anvil.server.call('ta_get_file', file_id)
+      if self._temp_url is not None:
+        try:
+          self._temp_url.revoke()
+        except Exception:
+          pass
+      self._temp_url = anvil.media.TempUrl(media)
+      anvil.js.window.Audio(self._temp_url.url).play()
+    except Exception as e:
+      Notification(f"Couldn't play the audio: {e}",
+                   style="warning", timeout=4).show()
+
+  def _handle_voice_row(self, row):
+    """Intercept voice-protocol rows from the poll; return True when
+    the row is internal and must NOT render in the thread."""
+    role = row['role']
+    if role in ('voice_req', 'stt_req'):
+      return True
+    if role == 'stt':
+      self.txt_question.text = row['content']
+      self.txt_question.focus()
+      Notification("Transcribed — check it and tap ↑ to send.",
+                   timeout=4).show()
+      return True
+    if role == 'voice':
+      try:
+        target = int(row['content'])
+      except (TypeError, ValueError):
+        target = None
+      pending = self._speak_pending.pop(target, None)
+      if row['file_id']:
+        self._play_file(row['file_id'])
+      if pending is not None:
+        pending.set_speak_ready()
+      return True
+    return False
+
   # ── receiving ────────────────────────────────────────────────────
 
   def tmr_poll_tick(self, **event_args):
@@ -223,16 +335,21 @@ class TitanAIChat(TitanAIChatTemplate):
 
     new_rows = update['messages']
     if new_rows:
+      appended = False
       for row in new_rows:
         self.last_message_id = max(self.last_message_id, row['message_id'])
+        if self._handle_voice_row(row):
+          continue
         if row['role'] in ('assistant', 'error'):
           # The turn is over: clear its transient status lines.
           self.items = [i for i in self.items if i['role'] != 'status']
         self.items.append(row)
-      self.rp_messages.items = list(self.items)
-      # Keep the newest message in view.
-      panels = self.rp_messages.get_components()
-      if panels:
-        panels[-1].scroll_into_view()
+        appended = True
+      if appended:
+        self.rp_messages.items = list(self.items)
+        # Keep the newest message in view.
+        panels = self.rp_messages.get_components()
+        if panels:
+          panels[-1].scroll_into_view()
 
     self.lbl_busy.visible = update['busy']

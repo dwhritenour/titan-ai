@@ -327,6 +327,101 @@ def ta_get_file(file_id):
 
 
 # =============================================================================
+# VOICE (voice-1.0.0) — queue-driven, keys stay on the service box
+# =============================================================================
+
+MAX_VOICE_BYTES = 10 * 1024 * 1024    # ~10MB ≈ several minutes of opus
+
+
+@anvil.server.callable
+def ta_request_speech(session_id, message_id):
+  """Ask the service to speak an answer. If it was already synthesized
+  for this session, return the existing audio file_id (free replay);
+  otherwise queue a TTS job and return {'queued': True}."""
+  conn = _get_connection()
+  try:
+    cursor = conn.cursor()
+    if _session_username(cursor, session_id) is None:
+      raise ValueError("Unknown chat session — reload the app and try again.")
+
+    # Replay: a 'voice' row already announces audio for this message.
+    cursor.execute(
+      """
+      SELECT TOP 1 file_id FROM dbo.tai_chat_messages
+      WHERE session_id = %s AND role = 'voice' AND content = %s
+        AND file_id IS NOT NULL
+      ORDER BY message_id DESC
+      """,
+      (session_id, str(message_id))
+    )
+    row = cursor.fetchone()
+    if row:
+      return {'file_id': row['file_id']}
+
+    # Dedup: a request for this message is already pending/processing.
+    cursor.execute(
+      """
+      SELECT COUNT(*) AS n FROM dbo.tai_chat_messages
+      WHERE session_id = %s AND role = 'voice_req' AND content = %s
+        AND status IN ('pending', 'processing')
+      """,
+      (session_id, str(message_id))
+    )
+    if cursor.fetchone()['n'] == 0:
+      cursor.execute(
+        """
+        INSERT INTO dbo.tai_chat_messages (session_id, role, content, status)
+        VALUES (%s, 'voice_req', %s, 'pending')
+        """,
+        (session_id, str(message_id))
+      )
+    conn.commit()
+    return {'queued': True}
+  finally:
+    conn.close()
+
+
+@anvil.server.callable
+def ta_submit_voice(session_id, audio_media):
+  """Store a mic recording and queue it for transcription. The
+  transcript comes back through ta_get_updates as a role='stt' row."""
+  conn = _get_connection()
+  try:
+    cursor = conn.cursor()
+    if _session_username(cursor, session_id) is None:
+      raise ValueError("Unknown chat session — reload the app and try again.")
+    blob = audio_media.get_bytes()
+    if not blob:
+      raise ValueError("The recording came through empty — try again.")
+    if len(blob) > MAX_VOICE_BYTES:
+      raise ValueError("That recording is too long — keep it under a "
+                       "couple of minutes.")
+    content_type = audio_media.content_type or 'audio/webm'
+    cursor.execute(
+      """
+      INSERT INTO dbo.tai_chat_files
+        (session_id, filename, content_type, file_bytes, byte_count)
+      OUTPUT inserted.file_id
+      VALUES (%s, %s, %s, %s, %s)
+      """,
+      (session_id, 'voice-question', content_type, blob, len(blob))
+    )
+    file_id = cursor.fetchone()['file_id']
+    cursor.execute(
+      """
+      INSERT INTO dbo.tai_chat_messages
+        (session_id, role, content, status, file_id)
+      VALUES (%s, 'stt_req', '', 'pending', %s)
+      """,
+      (session_id, file_id)
+    )
+    conn.commit()
+    return True
+  finally:
+    conn.close()
+
+
+# =============================================================================
 # SUGGESTIONS
 # =============================================================================
 # 2026-09-17: per-message thumbs (ta_submit_feedback) removed along with

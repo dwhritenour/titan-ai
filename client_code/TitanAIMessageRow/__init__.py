@@ -28,6 +28,7 @@ rt_trace.
 
 import anvil.server
 import anvil.media
+from anvil import Link, get_open_form
 
 from ._anvil_designer import TitanAIMessageRowTemplate
 
@@ -72,10 +73,29 @@ class TitanAIMessageRow(TitanAIMessageRowTemplate):
       self.lbl_user.text = item['content']
     elif role == 'assistant':
       self.rt_answer.content = item['content']   # markdown
+      # Voice (voice-1.0.0): tap-to-play speaker chip, code-only.
+      self.lk_speak = Link(text="🔊 Listen", role='ta-action')
+      self.lk_speak.set_event_handler('click', self._speak_click)
+      self.fp_actions.add_component(self.lk_speak)
     elif role == 'status':
       self.lbl_status.text = item['content']
     elif role == 'error':
       self.lbl_error.text = item['content']
+
+  # ── voice (voice-1.0.0) ──────────────────────────────────────────
+
+  def _speak_click(self, **event_args):
+    form = get_open_form()
+    if hasattr(form, 'request_speech'):
+      form.request_speech(self.item['message_id'], self)
+
+  def set_speak_busy(self):
+    self.lk_speak.text = "🔊 Preparing audio…"
+    self.lk_speak.enabled = False
+
+  def set_speak_ready(self):
+    self.lk_speak.text = "🔊 Listen again"
+    self.lk_speak.enabled = True
 
   # ── file download ────────────────────────────────────────────────
 
