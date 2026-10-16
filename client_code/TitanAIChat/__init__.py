@@ -68,6 +68,8 @@ class TitanAIChat(TitanAIChatTemplate):
     self._rec_started = 0
     self._speak_pending = {}       # message_id -> row awaiting audio
     self._temp_url = None          # last TempUrl, revoked on next play
+    self._audio = None             # the one playing js Audio, else None
+    self._playing_row = None       # row whose chip shows ⏹ Stop
     self.lk_mic = Link(text="🎤", role='ta-action')
     self.lk_mic.set_event_handler('click', self._mic_click)
     self.fp_input.add_component(self.lk_mic)
@@ -293,7 +295,13 @@ class TitanAIChat(TitanAIChatTemplate):
       alert(str(e), title="Couldn't send the recording")
 
   def request_speech(self, message_id, row):
-    """Called by a message row's 🔊 chip."""
+    """Called by a message row's 🔊 chip. Tapping the row that is
+    currently PLAYING stops it; tapping any other row stops the old
+    audio and plays the new one — only one voice at a time."""
+    if self._playing_row is row:
+      self._stop_audio()
+      return
+    self._stop_audio()
     try:
       res = anvil.server.call('ta_request_speech',
                               self.session_id, message_id)
@@ -301,22 +309,45 @@ class TitanAIChat(TitanAIChatTemplate):
       alert(str(e), title="Voice")
       return
     if res.get('file_id'):
-      self._play_file(res['file_id'])
-      row.set_speak_ready()
+      self._play_file(res['file_id'], row)
     else:
       self._speak_pending[int(message_id)] = row
       row.set_speak_busy()
 
-  def _play_file(self, file_id):
+  def _stop_audio(self):
+    audio, self._audio = self._audio, None
+    if audio is not None:
+      try:
+        audio.pause()
+      except Exception:
+        pass
+    row, self._playing_row = self._playing_row, None
+    if row is not None:
+      try:
+        row.set_speak_ready()
+      except Exception:
+        pass
+
+  def _audio_ended(self, event):
+    self._stop_audio()
+
+  def _play_file(self, file_id, row=None):
     try:
       media = anvil.server.call('ta_get_file', file_id)
+      self._stop_audio()
       if self._temp_url is not None:
         try:
           self._temp_url.revoke()
         except Exception:
           pass
       self._temp_url = anvil.media.TempUrl(media)
-      anvil.js.window.Audio(self._temp_url.url).play()
+      audio = anvil.js.window.Audio(self._temp_url.url)
+      audio.onended = self._audio_ended
+      audio.play()
+      self._audio = audio
+      self._playing_row = row
+      if row is not None:
+        row.set_speak_playing()
     except Exception as e:
       Notification(f"Couldn't play the audio: {e}",
                    style="warning", timeout=4).show()
@@ -339,10 +370,10 @@ class TitanAIChat(TitanAIChatTemplate):
       except (TypeError, ValueError):
         target = None
       pending = self._speak_pending.pop(target, None)
-      if row['file_id']:
-        self._play_file(row['file_id'])
       if pending is not None:
         pending.set_speak_ready()
+      if row['file_id']:
+        self._play_file(row['file_id'], pending)
       return True
     return False
 

@@ -102,6 +102,10 @@ class TitanAIMessageRow(TitanAIMessageRowTemplate):
     self._speak_busy = False
     self.lk_speak.text = "🔊 Listen again"
 
+  def set_speak_playing(self):
+    self._speak_busy = False       # clickable — the click STOPS it
+    self.lk_speak.text = "⏹ Stop"
+
   # ── file download ────────────────────────────────────────────────
 
   def _download_click(self, **event_args):
