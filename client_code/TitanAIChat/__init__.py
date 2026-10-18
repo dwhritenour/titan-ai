@@ -68,7 +68,8 @@ class TitanAIChat(TitanAIChatTemplate):
     self._rec_started = 0
     self._speak_pending = {}       # message_id -> row awaiting audio
     self._temp_url = None          # last TempUrl, revoked on next play
-    self._audio = None             # the one playing js Audio, else None
+    self._audio = None             # the playing element, else None
+    self._audio_el = None          # ONE reusable js Audio (iPad rule)
     self._playing_row = None       # row whose chip shows ⏹ Stop
     self.lk_mic = Link(text="🎤", role='ta-action')
     self.lk_mic.set_event_handler('click', self._mic_click)
@@ -335,6 +336,37 @@ class TitanAIChat(TitanAIChatTemplate):
     except Exception as e:
       alert(str(e), title="Couldn't send the recording")
 
+  # A zero-sample WAV used to "bless" the audio element inside a tap.
+  _SILENT_WAV = ('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA'
+                 'RKwAAIhYAQACABAAZGF0YQAAAAA=')
+
+  def _get_audio_el(self):
+    if self._audio_el is None:
+      self._audio_el = anvil.js.window.Audio()
+      self._audio_el.onended = self._audio_ended
+    return self._audio_el
+
+  def _unlock_audio(self):
+    """iPad/iPhone (all iOS browsers are Safari/WebKit): play() only
+    succeeds on an element that first played DURING a user tap. Our
+    server round-trip suspends, so by the time the mp3 arrives the tap
+    is 'over' and play() throws NotAllowedError. Playing a silent clip
+    on ONE reusable element synchronously inside the tap unlocks it —
+    every later play() on that same element then works, even plays
+    started from the poll timer."""
+    el = self._get_audio_el()
+    if self._audio is not None:
+      return                       # mid-play — already unlocked
+    try:
+      el.src = self._SILENT_WAV
+      p = el.play()
+      try:
+        p.catch(lambda err: None)  # ignore — unlock is best-effort
+      except Exception:
+        pass
+    except Exception:
+      pass
+
   def request_speech(self, message_id, row):
     """Called by a message row's 🔊 chip. Tapping the row that is
     currently PLAYING stops it; tapping any other row stops the old
@@ -343,6 +375,7 @@ class TitanAIChat(TitanAIChatTemplate):
       self._stop_audio()
       return
     self._stop_audio()
+    self._unlock_audio()           # MUST precede the server call
     try:
       res = anvil.server.call('ta_request_speech',
                               self.session_id, message_id)
@@ -382,9 +415,13 @@ class TitanAIChat(TitanAIChatTemplate):
         except Exception:
           pass
       self._temp_url = anvil.media.TempUrl(media)
-      audio = anvil.js.window.Audio(self._temp_url.url)
-      audio.onended = self._audio_ended
-      audio.play()
+      audio = self._get_audio_el()   # the tap-unlocked element
+      audio.src = self._temp_url.url
+      p = audio.play()
+      try:
+        p.catch(self._play_blocked)  # async refusal (iOS autoplay)
+      except Exception:
+        pass
       self._audio = audio
       self._playing_row = row
       if row is not None:
@@ -392,6 +429,15 @@ class TitanAIChat(TitanAIChatTemplate):
     except Exception as e:
       Notification(f"Couldn't play the audio: {e}",
                    style="warning", timeout=4).show()
+
+  def _play_blocked(self, err):
+    """The browser refused play() after the fact — e.g. the very first
+    play on an iPad arrived from the background poll, before any tap
+    unlocked audio. The mp3 is already cached, so a direct tap now
+    plays instantly (and unlocks the element for good)."""
+    self._stop_audio()
+    Notification("Audio is ready — tap 🔊 Listen to play it.",
+                 timeout=5).show()
 
   def _handle_voice_row(self, row):
     """Intercept voice-protocol rows from the poll; return True when
